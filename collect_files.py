@@ -9,7 +9,7 @@ def collect_files(input_dir, output_dir, max_depth=None):
 
     for root, dirs, files in os.walk(input_dir):
         rel_path = os.path.relpath(root, input_dir)
-        depth = 0 if rel_path == '.' else rel_path.count(os.sep) + 1
+        depth = rel_path.count(os.sep)  
 
         if max_depth is not None and depth >= max_depth:
             dirs[:] = []
@@ -28,6 +28,7 @@ def collect_files(input_dir, output_dir, max_depth=None):
                     dst_path = os.path.join(output_dir, dst_file)
                     counter += 1
             shutil.copy2(src_path, dst_path)
+
 
 if __name__ == "__main__":
     args = sys.argv[1:]
