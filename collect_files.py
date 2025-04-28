@@ -9,18 +9,19 @@ def collect_files(input_dir, output_dir, max_depth=None):
 
     for root, dirs, files in os.walk(input_dir):
         rel_path = os.path.relpath(root, input_dir)
-        # Вычисляем текущую глубину
         depth = 0 if rel_path == '.' else rel_path.count(os.sep) + 1
 
-        # Ограничим глубину, если задан max_depth
+ 
         if max_depth is not None and depth > max_depth:
-            continue
+            dirs[:] = []
+            continue  
+
         for file in files:
             src_path = os.path.join(root, file)
             dst_file = file
             dst_path = os.path.join(output_dir, dst_file)
 
-            # Суффиксы для повторяющихся имён
+
             if os.path.exists(dst_path):
                 base, ext = os.path.splitext(dst_file)
                 counter = 1
@@ -39,7 +40,7 @@ if __name__ == "__main__":
             max_depth = int(args[idx + 1])
             del args[idx:idx+2]
         except Exception:
-            print("max_depth должен быть целым числом")
+            print("max_depth должно быть целым числом")
             sys.exit(1)
     if len(args) != 2:
         print("Usage: python collect_files.py input_dir output_dir [--max_depth N]")
