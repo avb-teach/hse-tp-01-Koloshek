@@ -1,63 +1,89 @@
 #!/bin/bash
 
-maxdepth=""
-src=""
-dst=""
+depth_limit=""
+source_dir=""
+destination_dir=""
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --max_depth)
-            maxdepth="-maxdepth $2"
-            shift 2
-            ;;
-        *)
-            if [[ -z "$src" ]]; then
-                src="$1"
-            else
-                dst="\$1"
-            fi
-            shift
-            ;;
-    esac
-done
-
-if [[ -z "$src" || -z "$dst" ]]; then
-    echo "Usage: \$0 [--max_depth <depth>] <input_dir> <output_dir>"
-    exit 1
-fi
-
-if [[ ! -d "$src" ]]; then
-    echo "Ошибка: '$src' не является директорией"
-    exit 1
-fi
-
-mkdir -p "$dst" || {
-    echo "Ошибка: невозможно создать директорию '$dst'"
-    exit 1
-}
-
-get_new_name() {
-    filepath="$1"
-    outdir="$2"
-    fname=$(basename "$filepath")
-    base="${fname%.*}"
-    ext="${fname##*.}"
-    [[ "$base" == "$ext" ]] && ext="" || ext=".$ext"
-    idx=1
-    newfile="$fname"
-    while [[ -f "$outdir/$newfile" ]]; do
-        newfile="${base}_${idx}${ext}"
-        ((idx++))
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --max_depth)
+                depth_limit="$2"
+                shift 2
+                ;;
+            *)
+                if [[ -z "$source_dir" ]]; then
+                    source_dir="$1"
+                else
+                    destination_dir="\$1"
+                fi
+                shift
+                ;;
+        esac
     done
-    echo "$newfile"
 }
 
-find "$src" -type f $maxdepth | while read -r file; do
-    newname=$(get_new_name "$file" "$dst")
-    cp -v "$file" "$dst/$newname" || {
-        echo "Ошибка: не удалось скопировать '$file'"
+check_arguments() {
+    if [[ -z "$source_dir" || -z "$destination_dir" ]]; then
+        echo "Usage: \$0 [--max_depth <depth>] <input_dir> <output_dir>"
+        exit 1
+    fi
+
+    if [[ ! -d "$source_dir" ]]; then
+        echo "Error: '$source_dir' is not a directory"
+        exit 1
+    fi
+
+    mkdir -p "$destination_dir" || {
+        echo "Error: Unable to create directory '$destination_dir'"
         exit 1
     }
-done
+}
 
-exit 0
+generate_unique_name() {
+    input_file="$1"
+    target_dir="$2"
+
+    file_name=$(basename "$input_file")
+    name_part="${file_name%.*}"
+    extension="${file_name##*.}"
+    counter=1
+    unique_name="$file_name"
+
+    if [[ "$file_name" == "$extension" ]]; then
+        extension=""
+    else
+        extension=".$extension"
+    fi
+
+    while [[ -e "$target_dir/$unique_name" ]]; do
+        unique_name="${name_part}_${counter}${extension}"
+        ((counter++))
+    done
+
+    echo "$unique_name"
+}
+
+copy_files() {
+    find_options=""
+    if [[ -n "$depth_limit" ]]; then
+        find_options="-maxdepth $depth_limit"
+    fi
+
+    while IFS= read -r file_path; do
+        unique_name=$(generate_unique_name "$file_path" "$destination_dir")
+        target_path="$destination_dir/$unique_name"
+        cp -v "$file_path" "$target_path" || {
+            echo "Error: Failed to copy $file_path to $target_path"
+            exit 1
+        }
+    done < <(find "$source_dir" -type f $find_options)
+}
+
+main() {
+    parse_args "$@"
+    check_arguments
+    copy_files
+}
+
+main "$@"
