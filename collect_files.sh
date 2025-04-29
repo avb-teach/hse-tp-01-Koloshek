@@ -1,49 +1,63 @@
 #!/bin/bash
 
-src=$1
-dst=$2
-depth=-1
+maxdepth=""
+src=""
+dst=""
 
-[ $# -lt 2 ] && { echo "need paths"; exit 1; }
-
-while [ -n "\$3" ]; do
-    case "$3" in
+while [[ $# -gt 0 ]]; do
+    case $1 in
         --max_depth)
-            depth=\$4
-            [[ ! $depth =~ ^[0-9]+$ ]] && exit 1
-            shift 4
+            maxdepth="-maxdepth $2"
+            shift 2
             ;;
-        *) 
-            exit 1
+        *)
+            if [[ -z "$src" ]]; then
+                src="$1"
+            else
+                dst="\$1"
+            fi
+            shift
             ;;
     esac
 done
 
-[ ! -d "$dst" ] && mkdir "$dst"
+if [[ -z "$src" || -z "$dst" ]]; then
+    echo "Usage: \$0 [--max_depth <depth>] <input_dir> <output_dir>"
+    exit 1
+fi
 
-for f in $(find "$src" -type f); do
-    path=${f#$src/}
-    levels=$(echo "$path" | tr -cd '/' | wc -c)
-    
-    if [ $depth -ge 0 ] && [ $levels -ge $depth ]; then
-        cut_levels=$((levels - depth + 1))
-        path=$(echo "$path" | cut -d/ -f$((cut_levels+1))-)
-    fi
-    
-    target="$dst/$path"
-    
-    if [ -f "$target" ]; then
-        name=${target%.*}
-        ext=${target##*.}
-        num=1
-        
-        while [ -f "$target" ]; do
-            [ "$name" = "$ext" ] && target="${name}_$num" || target="${name}_$num.$ext"
-            num=$((num+1))
-        done
-    fi
-    
-    mdir=$(dirname "$target")
-    [ ! -d "$mdir" ] && mkdir -p "$mdir"
-    cp "$f" "$target"
+if [[ ! -d "$src" ]]; then
+    echo "Ошибка: '$src' не является директорией"
+    exit 1
+fi
+
+mkdir -p "$dst" || {
+    echo "Ошибка: невозможно создать директорию '$dst'"
+    exit 1
+}
+
+get_new_name() {
+    filepath="$1"
+    outdir="$2"
+    fname=$(basename "$filepath")
+    base="${fname%.*}"
+    ext="${fname##*.}"
+    [[ "$base" == "$ext" ]] && ext="" || ext=".$ext"
+    idx=1
+    newfile="$fname"
+    while [[ -f "$outdir/$newfile" ]]; do
+        newfile="${base}_${idx}${ext}"
+        ((idx++))
+    done
+    echo "$newfile"
+}
+
+find "$src" -type f $maxdepth | while read -r file; do
+    newname=$(get_new_name "$file" "$dst")
+    cp -v "$file" "$dst/$newname" || {
+        echo "Ошибка: не удалось скопировать '$file'"
+        exit 1
+    }
 done
+
+exit 0
