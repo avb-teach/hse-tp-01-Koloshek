@@ -1,21 +1,21 @@
 #!/bin/bash
 
-depth_limit=""
-source_dir=""
-destination_dir=""
+source_directory=""
+target_directory=""
+depth_parameter=""
 
-parse_args() {
+process_arguments() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --max_depth)
-                depth_limit="$2"
+                depth_parameter="$2"
                 shift 2
                 ;;
             *)
-                if [[ -z "$source_dir" ]]; then
-                    source_dir="$1"
+                if [[ -z "$source_directory" ]]; then
+                    source_directory="$1"
                 else
-                    destination_dir="\$1"
+                    target_directory="\$1"
                 fi
                 shift
                 ;;
@@ -23,66 +23,66 @@ parse_args() {
     done
 }
 
-check_arguments() {
-    if [[ -z "$source_dir" || -z "$destination_dir" ]]; then
-        echo "Usage: \$0 [--max_depth <depth>] <input_dir> <output_dir>"
+validate_input() {
+    if [[ -z "$source_directory" || -z "$target_directory" ]]; then
+        echo "Использование: \$0 [--max_depth N] <исходная_директория> <целевая_директория>"
         exit 1
     fi
 
-    if [[ ! -d "$source_dir" ]]; then
-        echo "Error: '$source_dir' is not a directory"
+    if [[ ! -d "$source_directory" ]]; then
+        echo "Ошибка: '$source_directory' не является директорией"
         exit 1
     fi
-
-    mkdir -p "$destination_dir" || {
-        echo "Error: Unable to create directory '$destination_dir'"
-        exit 1
-    }
 }
 
-generate_unique_name() {
-    input_file="$1"
-    target_dir="$2"
-
-    file_name=$(basename "$input_file")
-    name_part="${file_name%.*}"
-    extension="${file_name##*.}"
-    counter=1
-    unique_name="$file_name"
-
-    if [[ "$file_name" == "$extension" ]]; then
+generate_unique_filename() {
+    local file_path="$1"
+    local output_dir="$2"
+    
+    local name=$(basename "$file_path")
+    local name_part="${name%.*}"
+    local extension="${name##*.}"
+    
+    if [[ "$name" == "$extension" ]]; then
         extension=""
     else
         extension=".$extension"
     fi
-
-    while [[ -e "$target_dir/$unique_name" ]]; do
-        unique_name="${name_part}_${counter}${extension}"
+    
+    local counter=1
+    local new_name="$name"
+    
+    while [[ -f "$output_dir/$new_name" ]]; do
+        new_name="${name_part}_${counter}${extension}"
         ((counter++))
     done
-
-    echo "$unique_name"
+    
+    echo "$new_name"
 }
 
 copy_files() {
-    find_options=""
-    if [[ -n "$depth_limit" ]]; then
-        find_options="-maxdepth $depth_limit"
+    mkdir -p "$target_directory" || {
+        echo "Ошибка: Не удалось создать директорию '$target_directory'"
+        exit 1
+    }
+
+    local depth_option=""
+    if [[ -n "$depth_parameter" ]]; then
+        depth_option="-maxdepth $depth_parameter"
     fi
 
-    while IFS= read -r file_path; do
-        unique_name=$(generate_unique_name "$file_path" "$destination_dir")
-        target_path="$destination_dir/$unique_name"
-        cp -v "$file_path" "$target_path" || {
-            echo "Error: Failed to copy $file_path to $target_path"
+    find "$source_directory" -type f $depth_option | while read -r file; do
+        local new_filename=$(generate_unique_filename "$file" "$target_directory")
+        cp -v "$file" "$target_directory/$new_filename" || {
+            echo "Ошибка: Не удалось скопировать '$file' в '$target_directory/$new_filename'"
             exit 1
         }
-    done < <(find "$source_dir" -type f $find_options)
+    done
 }
 
 main() {
-    parse_args "$@"
-    check_arguments
+    process_arguments "$@"
+    validate_input
     copy_files
 }
 
