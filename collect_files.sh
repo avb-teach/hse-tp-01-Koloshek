@@ -1,61 +1,89 @@
 #!/bin/bash
 
-src_dir="$1"
-dst_dir="$2"
-depth_limit=-1
+source_directory=""
+target_directory=""
+depth_parameter=""
 
-shift 2
+process_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --max_depth)
+                depth_parameter="$2"
+                shift 2
+                ;;
+            *)
+                if [[ -z "$source_directory" ]]; then
+                    source_directory="$1"
+                else
+                    target_directory="\$1"
+                fi
+                shift
+                ;;
+        esac
+    done
+}
 
-while [ $# -gt 0 ]; do
-    if [ "$1" = "--max_depth" ]; then
-        if ! [[ "$2" =~ ^[0-9]+$ ]]; then
-            echo "Ошибка: Параметр --max_depth должен быть целым числом"
-            exit 1
-        fi
-        depth_limit="\$2"
-        shift 2
-    else
-        echo "Ошибка: Недопустимый аргумент \$1"
+validate_input() {
+    if [[ -z "$source_directory" || -z "$target_directory" ]]; then
+        echo "Использование: \$0 [--max_depth N] <исходная_директория> <целевая_директория>"
         exit 1
     fi
-done
 
-mkdir -p "$dst_dir"
-
-declare -A file_index
-
-find "$src_dir" ${depth_limit:+-maxdepth "$depth_limit"} -mindepth 1 | while IFS= read -r entry; do
-    if [ -d "$entry" ]; then
-        relative_path="${entry#$src_dir/}"
-        mkdir -p "$dst_dir/$relative_path"
-    elif [ -f "$entry" ]; then
-        relative_path="${entry#$src_dir/}"
-        target_path="$dst_dir/$relative_path"
-
-        filename=$(basename "$target_path")
-        dirname=$(dirname "$target_path")
-
-        mkdir -p "$dirname"
-
-        if [ -e "$target_path" ]; then
-            name_without_ext="${filename%.*}"
-            extension="${filename##*.}"
-
-            if [ "$name_without_ext" = "$extension" ]; then
-                name_without_ext="$filename"
-                extension=""
-            fi
-
-            file_index["$filename"]=$((file_index["$filename"] + 1))
-            file_suffix="${file_index["$filename"]}"
-            
-            if [ -n "$extension" ]; then
-                target_path="$dirname/${name_without_ext}_$file_suffix.$extension"
-            else
-                target_path="$dirname/${name_without_ext}_$file_suffix"
-            fi
-        fi
-
-        cp "$entry" "$target_path"
+    if [[ ! -d "$source_directory" ]]; then
+        echo "Ошибка: '$source_directory' не является директорией"
+        exit 1
     fi
-done
+}
+
+generate_unique_filename() {
+    local file_path="$1"
+    local output_dir="$2"
+    
+    local name=$(basename "$file_path")
+    local name_part="${name%.*}"
+    local extension="${name##*.}"
+    
+    if [[ "$name" == "$extension" ]]; then
+        extension=""
+    else
+        extension=".$extension"
+    fi
+    
+    local counter=1
+    local new_name="$name"
+    
+    while [[ -f "$output_dir/$new_name" ]]; do
+        new_name="${name_part}_${counter}${extension}"
+        ((counter++))
+    done
+    
+    echo "$new_name"
+}
+
+copy_files() {
+    mkdir -p "$target_directory" || {
+        echo "Ошибка: Не удалось создать директорию '$target_directory'"
+        exit 1
+    }
+
+    local depth_option=""
+    if [[ -n "$depth_parameter" ]]; then
+        depth_option="-maxdepth $depth_parameter"
+    fi
+
+    find "$source_directory" -type f $depth_option | while read -r file; do
+        local new_filename=$(generate_unique_filename "$file" "$target_directory")
+        cp -v "$file" "$target_directory/$new_filename" || {
+            echo "Ошибка: Не удалось скопировать '$file' в '$target_directory/$new_filename'"
+            exit 1
+        }
+    done
+}
+
+main() {
+    process_arguments "$@"
+    validate_input
+    copy_files
+}
+
+main "$@"
